@@ -129,8 +129,31 @@ Camera.prototype.project = function (trans, p, vw, vh) {
     );
 };
 
-// Projection and normalization are expensive.
-// However, multiplication is less so.
+// Pipeline:
+// 1. Compute camera transform (World Space -> Camera Space)
+// 1.1. Compute object transforms
+// 2. Compute each vertex's coordinates in camera space (Object -> World, then World -> Camera)
+// 3. Apply vertex "shaders" (transformations)
+// 4. Triangulation
+// 5. Use Bresenham to compute edge "fragments" (pixels)
+// 6. Scan within triangles, computing face "fragments" (by averaging vertex parameters).
+// 7. Apply "fragment shaders" (pixel transformations)
+// 8. Populate image data using fragments
+// 9. Load image data
+//
+// Questions:
+// What information do we need to store about a vertex?
+// What about for a fragment?
+// Best way to store z-coordinates of vertices to make future computations cheaper?
+// Cheap way to interpolate vertex z coordinates ("discrete distance function")?
+//
+// Consider:
+// The `square` function is monotonic over positive nums; what if we store the _square_
+// of z-coordinates instead of the coordinates themselves?
+// Does this box us in in any way?
+// What about regarding interpolation of face fragments?
+//
+// Projection and normalization are expensive. Multiplication is less so.
 // Thus, computing the camera transformation is fairly expensive, but
 // computing vertex positions is less so.
 
@@ -166,6 +189,11 @@ var cube = [
 var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
 function loop() {
+    cube[2].y += 0.002;
+    cube[3].y += 0.002;
+    cube[6].y += 0.002;
+    cube[7].y += 0.002;
+
     cam.setPos(
         new Vec3(cam.pos.x + 0.004, cam.pos.y + 0.003, cam.pos.z + 0.005)
     );
@@ -179,18 +207,18 @@ function loop() {
     var ct = cam.getTransform();
 
     for (var i = 0; i < cube.length; i++) {
-        var p = cam.project(ct, cube[i], canvas.width, canvas.height);
+        var p = cam.project(ct, cube[i], canvas.width / 10, canvas.height / 10);
 
         if (p === undefined) {
             continue;
         }
 
-        for (var x = p.x - 2; x <= p.x + 2; x++) {
-            for (var y = p.y - 2; y <= p.y + 2; y++) {
+        for (var x = p.x * 10; x <= p.x * 10 + 10; x++) {
+            for (var y = p.y * 10; y <= p.y * 10 + 10; y++) {
                 var base = (y * canvas.width + x) * 4;
                 img.data[base] = 255;
-                img.data[base + 1] = 255;
-                img.data[base + 2] = 0;
+                img.data[base + 1] = 0;
+                img.data[base + 2] = 255;
             }
         }
     }
